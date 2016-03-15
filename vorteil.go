@@ -7,11 +7,13 @@ import (
 
 	"github.com/alankm/makellos/core"
 	"github.com/alankm/makellos/core/shared"
+	"github.com/alankm/makellos/modules/messages"
 	"github.com/alankm/makellos/modules/privileges"
 )
 
 var modules = [...]shared.Module{
-	privileges.Privileges{},
+	&privileges.Privileges{},
+	&messages.Messages{},
 }
 
 func main() {
@@ -20,7 +22,7 @@ func main() {
 		return
 	}
 	vorteil := core.New(os.Args[1])
-	for module := range modules {
+	for _, module := range modules {
 		vorteil.Register(module)
 	}
 	err := vorteil.Start()

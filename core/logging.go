@@ -1,7 +1,11 @@
 package core
 
-import "github.com/alankm/makellos/core/shared"
+import (
+	"database/sql"
 
-func (c *Core) Log(log *shared.Log) {
-	c.logging.Post(log)
+	"github.com/alankm/makellos/core/shared"
+)
+
+func (c *Core) Log(tx *sql.Tx, log *shared.Log) {
+	c.logging.Post(tx, log)
 }
