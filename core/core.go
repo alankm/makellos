@@ -61,7 +61,6 @@ func (c *Core) init() {
 		c.web.server = multiserver.NewHTTPServer(c.conf.Bind, c.web.mux, nil)
 		c.web.cookie = securecookie.New(securecookie.GenerateRandomKey(64),
 			securecookie.GenerateRandomKey(32))
-
 		c.web.mux.HandleFunc("/services/login", c.loginHandler)
 	}
 }

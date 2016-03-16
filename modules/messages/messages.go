@@ -55,7 +55,7 @@ func (m *Messages) Setup(core shared.Core) error {
 }
 
 func (m *Messages) setupServices(router *mux.Router) {
-	router.Handle("/console", &shared.ProtectedHandler{m.core, m.post}).Methods("POST")
+	router.NewRoute().Handler(&shared.ProtectedHandler{m.core, m.post}).Path("/").Methods("POST")
 	router.Handle("/ws/debug", &shared.ProtectedHandler{m.core, m.wsDebug})
 	router.Handle("/debug", &shared.ProtectedHandler{m.core, m.httpDebug}).Methods("GET")
 	router.Handle("/ws/info", &shared.ProtectedHandler{m.core, m.wsInfo})
