@@ -36,6 +36,7 @@ type Rules struct {
 
 type Session interface {
 	Username() string
+	Groups() []string
 	GID() string
 	Mode() uint16
 }

@@ -2,6 +2,7 @@ package messages
 
 import (
 	"database/sql"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -18,6 +19,19 @@ type Messages struct {
 	inbox     chan *shared.Log
 	outbox    map[shared.Severity](chan *shared.Log)
 	customers map[shared.Severity](map[chan *shared.Log]bool)
+}
+
+type messagesList struct {
+	Length int           `json:"length"`
+	List   []alertOutput `json:"list"`
+}
+
+type alertOutput struct {
+	Severity string            `json:"severity"`
+	Time     int64             `json:"timestamp"`
+	Message  string            `json:"message"`
+	Code     string            `json:"code"`
+	Args     map[string]string `json:"info"`
 }
 
 func (m *Messages) Setup(core shared.Core) error {
@@ -41,24 +55,27 @@ func (m *Messages) Setup(core shared.Core) error {
 }
 
 func (m *Messages) setupServices(router *mux.Router) {
-	router.Handle("", &shared.ProtectedHandler{m.core, m.post}).Methods("POST")
-	router.Handle("/debug", &shared.ProtectedHandler{m.core, m.wsDebug}).Schemes("ws")
+	router.Handle("/console", &shared.ProtectedHandler{m.core, m.post}).Methods("POST")
+	router.Handle("/ws/debug", &shared.ProtectedHandler{m.core, m.wsDebug})
 	router.Handle("/debug", &shared.ProtectedHandler{m.core, m.httpDebug}).Methods("GET")
-	router.Handle("/info", &shared.ProtectedHandler{m.core, m.wsInfo}).Schemes("ws")
+	router.Handle("/ws/info", &shared.ProtectedHandler{m.core, m.wsInfo})
 	router.Handle("/info", &shared.ProtectedHandler{m.core, m.httpInfo}).Methods("GET")
-	router.Handle("/warning", &shared.ProtectedHandler{m.core, m.wsWarn}).Schemes("ws")
+	router.Handle("/ws/warning", &shared.ProtectedHandler{m.core, m.wsWarn})
 	router.Handle("/warning", &shared.ProtectedHandler{m.core, m.httpWarn}).Methods("GET")
-	router.Handle("/error", &shared.ProtectedHandler{m.core, m.wsError}).Schemes("ws")
+	router.Handle("/ws/error", &shared.ProtectedHandler{m.core, m.wsError})
 	router.Handle("/error", &shared.ProtectedHandler{m.core, m.httpError}).Methods("GET")
-	router.Handle("/critical", &shared.ProtectedHandler{m.core, m.wsCrit}).Schemes("ws")
+	router.Handle("/ws/critical", &shared.ProtectedHandler{m.core, m.wsCrit})
 	router.Handle("/critical", &shared.ProtectedHandler{m.core, m.httpCrit}).Methods("GET")
-	router.Handle("/alert", &shared.ProtectedHandler{m.core, m.wsAlert}).Schemes("ws")
+	router.Handle("/ws/alert", &shared.ProtectedHandler{m.core, m.wsAlert})
 	router.Handle("/alert", &shared.ProtectedHandler{m.core, m.httpAlert}).Methods("GET")
-	router.Handle("/all", &shared.ProtectedHandler{m.core, m.wsAll}).Schemes("ws")
+	router.Handle("/ws/all", &shared.ProtectedHandler{m.core, m.wsAll})
 	router.Handle("/all", &shared.ProtectedHandler{m.core, m.httpAll}).Methods("GET")
 }
 
 func (m *Messages) post(s shared.Session, w http.ResponseWriter, r *http.Request) {
+
+	fmt.Println("POST REQUEST")
+
 	tx, err := m.db.Begin()
 	if err != nil {
 		w.Write(shared.ResponseVorteilInternal.JSON())
@@ -70,31 +87,43 @@ func (m *Messages) post(s shared.Session, w http.ResponseWriter, r *http.Request
 	if val, ok := r.Header["Severity"]; ok {
 		sev = val[0]
 	}
+	fmt.Println(sev)
 	if val, ok := shared.SeverityCodes[sev]; !ok {
-		sevno = val
 		w.Write(shared.NewFailResponse(0, "missing or bad severity header").JSON())
+		return
+	} else {
+		sevno = val
 	}
 
 	var code string
 	if val, ok := r.Header["Code"]; ok {
 		code = val[0]
+	} else {
+		w.Write(shared.NewFailResponse(0, "missing or bad code header").JSON())
+		return
 	}
 	if code == "" {
 		w.Write(shared.NewFailResponse(0, "missing or bad code header").JSON())
+		return
 	}
 
 	var message string
 	if val, ok := r.Header["Message"]; ok {
 		message = val[0]
+	} else {
+		w.Write(shared.NewFailResponse(0, "missing or bad message header").JSON())
+		return
 	}
 	if message == "" {
 		w.Write(shared.NewFailResponse(0, "missing or bad message header").JSON())
+		return
 	}
 
 	var args = make(map[string]string)
 	var argsArray = r.Header["Args"]
 	if len(args)%2 == 1 {
 		w.Write(shared.NewFailResponse(0, "bad args header").JSON())
+		return
 	}
 	for i := 0; i < len(argsArray); i = i + 2 {
 		args[argsArray[i]] = argsArray[i+1]
@@ -113,7 +142,12 @@ func (m *Messages) post(s shared.Session, w http.ResponseWriter, r *http.Request
 		Args:    args,
 	}
 	m.Post(tx, log)
-	tx.Commit()
+	err = tx.Commit()
+	if err != nil {
+		w.Write(shared.ResponseVorteilInternal.JSON())
+	} else {
+		w.Write(shared.Success.JSON())
+	}
 }
 
 func (m *Messages) wsDebug(s shared.Session, w http.ResponseWriter, r *http.Request) {
@@ -173,6 +207,9 @@ func (m *Messages) httpAll(s shared.Session, w http.ResponseWriter, r *http.Requ
 }
 
 func (m *Messages) wsRequest(s shared.Session, w http.ResponseWriter, r *http.Request, severity shared.Severity) {
+
+	fmt.Println("WS REQUEST")
+
 	var upgrader = websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
@@ -207,7 +244,14 @@ func (m *Messages) wsRequest(s shared.Session, w http.ResponseWriter, r *http.Re
 		//return
 		// case <- connection lost
 		case x := <-monitor:
-			err := conn.WriteJSON(x)
+			ao := alertOutput{
+				Time:     x.Time,
+				Message:  x.Message,
+				Code:     x.Code,
+				Args:     x.Args,
+				Severity: shared.SeverityStrings[x.Severity],
+			}
+			err := conn.WriteJSON(ao)
 			if err != nil {
 				return
 			}
@@ -218,8 +262,13 @@ func (m *Messages) wsRequest(s shared.Session, w http.ResponseWriter, r *http.Re
 }
 
 func (m *Messages) httpRequest(s shared.Session, w http.ResponseWriter, r *http.Request, severity shared.Severity) {
-	var offset int
-	var length int
+
+	fmt.Println("HTTP REQUEST 2")
+
+	var offset, length int
+	var start, end int64
+	var sort string
+
 	vals := r.URL.Query()
 	val, ok := vals["offset"]
 	if ok && len(val) > 0 {
@@ -235,45 +284,91 @@ func (m *Messages) httpRequest(s shared.Session, w http.ResponseWriter, r *http.
 		length = -1
 	}
 
-	//////	///////	//////	///////	//////	/////	//////	//////	//////
-	/	//	//	//	////	/	/	/		/	/
-	/	//	//	//////	///	///	//	/	////	////
-	/	///	/////	/////	///	//	/////	//////	//////	//
-	/	//	//	//	/////	///	////	//	///	/
-	rows, err := a.db.Query("SELECT * FROM alerts WHERE severity!=? AND WHERE severity!=? ORDER BY id ASC LIMIT ?,?", "info", "debug", offset, length)
+	val, ok = vals["start"]
+	if ok && len(val) > 0 {
+		x, _ := strconv.ParseUint(val[0], 10, 64)
+		start = int64(x)
+	}
+
+	val, ok = vals["end"]
+	if ok && len(val) > 0 {
+		x, _ := strconv.ParseUint(val[0], 10, 64)
+		end = int64(x)
+	} else {
+		end = time.Now().Unix()
+	}
+
+	val, ok = vals["sort"]
+	if ok && len(val) > 0 && val[0] == "true" {
+		sort = "severity DESC, id DESC"
+	} else {
+		sort = "id DESC"
+	}
+
+	sevString := "("
+	switch severity {
+	case shared.Alert:
+		sevString += strconv.Itoa(shared.Warn)
+		sevString += ", "
+		sevString += strconv.Itoa(shared.Error)
+		sevString += ", "
+		sevString += strconv.Itoa(shared.Crit)
+	case shared.All:
+		sevString += strconv.Itoa(shared.Debug)
+		sevString += ", "
+		sevString += strconv.Itoa(shared.Info)
+		sevString += ", "
+		sevString += strconv.Itoa(shared.Warn)
+		sevString += ", "
+		sevString += strconv.Itoa(shared.Error)
+		sevString += ", "
+		sevString += strconv.Itoa(shared.Crit)
+	default:
+		sevString += strconv.Itoa(int(severity))
+	}
+	sevString += ")"
+
+	fmt.Printf("%v %v %v\n", offset, length, sort)
+
+	groups := s.Groups()
+	groupsString := "("
+	for i, group := range groups {
+		groupsString += "'" + group + "'"
+		if i < len(groups)-1 {
+			groupsString += ", "
+		}
+	}
+	groupsString += ")"
+
+	fmt.Println(sevString)
+	fmt.Println(groupsString)
+	rows, err := m.db.Query("SELECT * FROM messages WHERE (time BETWEEN ? AND ?) AND (severity IN "+sevString+") AND ((rulesowner = ? AND (rulesmode & 0x100) = 0x100) OR (rulesowner != ? AND rulesgroup IN "+groupsString+" AND (rulesmode & 0x020) = 0x020) OR (rulesowner != ? AND rulesgroup NOT IN "+groupsString+" AND (rulesmode & 0x004) = 0x004)) ORDER BY ? LIMIT ?,?", start, end, s.Username(), s.Username(), s.Username(), sort, offset, length)
 	if err != nil {
-		a.vorteil.Alert(s, Error, "blah", "SQL query issue: "+err.Error(), a.Name(), nil)
+		panic(err)
 	}
 	defer rows.Close()
 
 	var out []alertOutput
-
 	for rows.Next() {
-
-		var id, time int
-		var severity, message, code string
-		var owner, group, mode string
-
+		var id, time, severity, mode int
+		var message, code string
+		var owner, group string
 		err = rows.Scan(&id, &time, &severity, &message, &code, &owner, &group, &mode)
 		if err != nil {
-			a.vorteil.Alert(s, Error, "blah", "SQL query issue: "+err.Error(), a.Name(), nil)
+			panic(err)
 		}
-
-		//rules := privileges.NewRules(owner, group, mode)
-		//if !s.CanRead(rules) {
-		//	continue
-		//}
 
 		ao := alertOutput{
-			Time:    int64(time),
-			Message: message,
-			Code:    code,
-			Args:    make(map[string]string),
+			Time:     int64(time),
+			Message:  message,
+			Code:     code,
+			Args:     make(map[string]string),
+			Severity: shared.SeverityStrings[shared.Severity(severity)],
 		}
 
-		argrows, err := a.db.Query("SELECT * FROM args WHERE id=?", id)
+		argrows, err := m.db.Query("SELECT * FROM args WHERE id=?", id)
 		if err != nil {
-			a.vorteil.Alert(s, Error, "blah", "SQL query issue: "+err.Error(), a.Name(), nil)
+			panic(err)
 		}
 		defer argrows.Close()
 
@@ -282,18 +377,28 @@ func (m *Messages) httpRequest(s shared.Session, w http.ResponseWriter, r *http.
 			var key, value string
 			err = argrows.Scan(&rid, &key, &value)
 			if err != nil {
-				a.vorteil.Alert(s, Error, "blah", "SQL query issue: "+err.Error(), a.Name(), nil)
+				panic(err)
 			}
-
 			ao.Args[key] = value
-
 		}
 
 		out = append(out, ao)
-		response := NewSuccessResponse(out)
-		w.Write(response.JSON())
-
 	}
+
+	row := m.db.QueryRow("SELECT COUNT(*) FROM messages WHERE (time BETWEEN ? AND ?) AND (severity IN "+sevString+") AND ((rulesowner = ? AND (rulesmode & 0x100) = 0x100) OR (rulesowner != ? AND rulesgroup IN "+groupsString+" AND (rulesmode & 0x020) = 0x020) OR (rulesowner != ? AND rulesgroup NOT IN "+groupsString+" AND (rulesmode & 0x004) = 0x004))", start, end, s.Username(), s.Username(), s.Username())
+	if err != nil {
+		panic(err)
+	}
+	defer rows.Close()
+
+	var count int
+	err = row.Scan(&count)
+	if err != nil {
+		panic(err)
+	}
+
+	response := shared.NewSuccessResponse(&messagesList{count, out})
+	w.Write(response.JSON())
 }
 
 func (m *Messages) setupTables() {
@@ -301,12 +406,12 @@ func (m *Messages) setupTables() {
 		"CREATE TABLE IF NOT EXISTS messages (" +
 			"id INTEGER PRIMARY KEY, " +
 			"time INTEGER NULL, " +
-			"severity VARCHAR(32) NULL, " +
+			"severity INTEGER NULL, " +
 			"messagetext VARCHAR(128) NULL, " +
 			"messagecode VARCHAR(128) NULL, " +
 			"rulesowner VARCHAR(128) NULL, " +
 			"rulesgroup VARCHAR(128) NULL, " +
-			"rulesmode VARCHAR(4) NULL" +
+			"rulesmode INTEGER NULL" +
 			")",
 	)
 	if err != nil {
@@ -353,7 +458,8 @@ func (m *Messages) postie(department shared.Severity) {
 
 func (m *Messages) Post(tx *sql.Tx, log *shared.Log) {
 	m.inbox <- log
-	result, err := tx.Exec("INSERT INTO alerts(time, severity, messagetext, messagecode, rulesowner, rulesgroup, rulesmode) VALUES(?,?,?,?,?,?,?)", log.Time, log.Severity, log.Message, log.Code, log.Rules.Owner, log.Rules.Group, log.Rules.Mode)
+	fmt.Printf("POST: %v\n", log.Severity)
+	result, err := tx.Exec("INSERT INTO messages(time, severity, messagetext, messagecode, rulesowner, rulesgroup, rulesmode) VALUES(?,?,?,?,?,?,?)", log.Time, log.Severity, log.Message, log.Code, log.Rules.Owner, log.Rules.Group, log.Rules.Mode)
 	if err != nil {
 		panic(err)
 	}

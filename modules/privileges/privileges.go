@@ -208,6 +208,22 @@ func (p *Privileges) makeSession(rec *record, hash string) *Session {
 	return s
 }
 
+func (s *Session) Username() string {
+	return s.user
+}
+
+func (s *Session) GID() string {
+	return s.gid
+}
+
+func (s *Session) Groups() []string {
+	return s.groups
+}
+
+func (s *Session) Mode() uint16 {
+	return ^s.umask & 0x1FF
+}
+
 func (s *Session) inGroup(username, group string) bool {
 	var x string
 	row := s.p.db.QueryRow("SELECT * FROM usersgroups WHERE username=? AND groupname=?", username, group)
