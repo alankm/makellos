@@ -10,10 +10,10 @@ import (
 )
 
 /*
-The 'Messages' object implements Vorteil's 'Module' interface. It exists to add
-a powerful and advanced logging & messaging system for use by other modules to
-Vorteil. It is also a Vorteil service, providing web-accessible interfaces to
-access and interact with its data.
+Messages implements Vorteil's 'Module' interface. It exists to add a powerful
+and advanced logging & messaging system for use by other modules to Vorteil. It
+is also a Vorteil service, providing web-accessible interfaces to access and
+interact with its data.
 */
 type Messages struct {
 	functions shared.LoggingFunctions
@@ -39,10 +39,10 @@ type message struct {
 }
 
 /*
-The Setup function is required to implement Core's Module interface. It
-initializes appropriate tables within Core's database, spawns all of the
-goroutines required to make websockets work, hooks into Core's logging system
-to provide access to other modules, and then establishes its web services.
+Setup is required to implement Core's Module interface. It initializes
+appropriate tables within Core's database, spawns all of the goroutines
+required to make websockets work, hooks into Core's logging system to provide
+access to other modules, and then establishes its web services.
 */
 func (m *Messages) Setup(core shared.Core) error {
 	m.db = core.Database()
