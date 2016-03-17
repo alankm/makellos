@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"net/http"
 
+	"gopkg.in/inconshreveable/log15.v2"
+
 	"github.com/gorilla/mux"
 )
 
@@ -12,13 +14,16 @@ type Core interface {
 	LoggingHook(*LoggingFunctions)
 	AuthorizationHook(*AuthorizationFunctions)
 	Database() *sql.DB
+	SubLogger(Module) log15.Logger
 	// General
 	IsLeader() bool
 	Leader() string
 	ValidateCookie(*http.Cookie) Session
 	ServiceRouter(string) *mux.Router
+	NotifyLeaderChange(*chan bool)
+	UnsubscribeLeaderChange(*chan bool)
 	// Logging
-	Log(*sql.Tx, *Log)
+	Log(*Log)
 	// Access
 	Login(username, password string) (Session, error)
 	HashedLogin(username, hashword string) (Session, error)
@@ -39,6 +44,8 @@ type Session interface {
 	Groups() []string
 	GID() string
 	Mode() uint16
+	SU() bool
+	CanRead(*Rules) bool
 }
 
 type Severity int
@@ -79,7 +86,7 @@ type Log struct {
 }
 
 type LoggingFunctions struct {
-	Post func(*sql.Tx, *Log)
+	Post func(*Log)
 }
 
 type AuthorizationFunctions struct {
