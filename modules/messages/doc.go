@@ -1,7 +1,7 @@
 /*
 Package messages implements a powerful and advanced logging & messaging system
-for use by other Vorteil modules. It is also a Vorteil service, providing web-
-accessible interfaces to access and interact with the messages database.
+for use by other Vorteil modules. It is also a Vorteil service, providing web-accessible
+interfaces to access and interact with the messages database.
 
 Usage
 

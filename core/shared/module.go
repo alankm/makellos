@@ -9,6 +9,8 @@ import (
 	"github.com/gorilla/mux"
 )
 
+var sharedLogger log15.Logger = log15.New("module", "shared")
+
 type Core interface {
 	Register(Module)
 	LoggingHook(*LoggingFunctions)
@@ -100,6 +102,14 @@ type ProtectedHandler struct {
 }
 
 func (h *ProtectedHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	defer func(c Core, w http.ResponseWriter) {
+		rec := recover()
+		if r == nil {
+			return
+		}
+		sharedLogger.Error("recovered from panic", r.Method+": "+r.URL.String(), rec)
+		w.Write(ResponseVorteilInternal.JSON())
+	}(h.Core, w)
 	if !h.Core.IsLeader() {
 		w.Write(ResponseLeader.SetInfo("leader", h.Core.Leader()).JSON())
 		return

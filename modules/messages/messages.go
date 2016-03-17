@@ -46,7 +46,6 @@ to provide access to other modules, and then establishes its web services.
 */
 func (m *Messages) Setup(core shared.Core) error {
 	m.db = core.Database()
-	m.log = core.SubLogger(m)
 	m.core = core
 	m.setupTables()
 	m.inbox = make(chan *shared.Log)
