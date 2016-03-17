@@ -59,8 +59,7 @@ func (m *Messages) Setup(core shared.Core) error {
 	}
 	m.functions.Post = m.postLog
 	core.LoggingHook(&m.functions)
-	router := core.ServiceRouter("messages")
-	m.setupRoutes(router)
+	m.setupRoutes(core.ServiceRouter("messages"))
 	return nil
 }
 

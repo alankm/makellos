@@ -27,6 +27,7 @@ type Core interface {
 	// Logging
 	Log(*Log)
 	// Access
+	RegisterPath(string)
 	Login(username, password string) (Session, error)
 	HashedLogin(username, hashword string) (Session, error)
 }
