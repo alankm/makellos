@@ -1,4 +1,4 @@
-package vimages
+package images
 
 import (
 	"errors"

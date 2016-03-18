@@ -12,6 +12,23 @@ type Images struct {
 	db      *sql.DB
 	core    shared.Core
 	storage storage
+	config configuration
+}
+
+type configuration struct {
+	Base string `yaml:"base"`
+	Storage storageConfiguration `yaml:"storage"`
+}
+
+type Request struct {
+	Username string
+	Hashword string
+	Method   string
+	Path     string
+	URL      string
+	Checksum string
+	Header   map[string][]string
+	s        shared.Session
 }
 
 func (i *Images) Init(db *sql.DB) error {
@@ -23,6 +40,7 @@ func (i *Images) Init(db *sql.DB) error {
 func (i *Images) Setup(core shared.Core) error {
 	i.db = core.Database()
 	i.core = core
+	i.core.RegisterSyncFunction(i, i.apply)
 	i.setupRoutes(core.ServiceRouter("images"))
 	return i.Init(i.db)
 }
@@ -48,7 +66,7 @@ func (i *Images) setupTables() {
 	if err != nil {
 		panic(err)
 	}
-	_, err = i.db.Exec("INSERT INTO vimages VALUES(?,?,?,?,?,?,?)", "", "", true, "", 0, "", "")
+	_, err = i.db.Exec("INSERT INTO images VALUES(?,?,?,?,?,?,?)", "", "", true, "", 0, "", "")
 	if err != nil && !strings.HasPrefix(err.Error(), "UNIQUE") {
 		panic(err)
 	}

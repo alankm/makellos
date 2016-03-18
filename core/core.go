@@ -12,6 +12,7 @@ import (
 	"github.com/gorilla/securecookie"
 	"github.com/mattn/go-sqlite3"
 	"github.com/sisatech/multiserver"
+	"github.com/sisatech/raft"
 
 	"gopkg.in/inconshreveable/log15.v2"
 )
@@ -24,6 +25,7 @@ type Core struct {
 	logging *shared.LoggingFunctions
 	access  *shared.AuthorizationFunctions
 	web     web
+	raft    consensus
 }
 
 type web struct {
@@ -31,6 +33,13 @@ type web struct {
 	mux      *mux.Router
 	cookie   *securecookie.SecureCookie
 	services []string
+}
+
+type consensus struct {
+	config *raft.Config
+	server *raft.Raft
+	client *raft.Client
+	fsm    *stateMachine
 }
 
 func init() {
@@ -56,12 +65,33 @@ func (c *Core) init() {
 			return
 		}
 		c.db, c.err = sql.Open("sql_fk", c.conf.Base+"/vorteil.db")
+		if c.err != nil {
+			return
+		}
 		c.log = log15.New("module", reflect.TypeOf(c).Name())
 		c.web.mux = mux.NewRouter()
 		c.web.server = multiserver.NewHTTPServer(c.conf.Bind, c.web.mux, nil)
 		c.web.cookie = securecookie.New(securecookie.GenerateRandomKey(64),
 			securecookie.GenerateRandomKey(32))
 		c.web.mux.HandleFunc("/services/login", c.loginHandler)
+		c.raft.config = &c.conf.Raft
+		if c.raft.config.BaseDir == "" {
+			c.raft.config.BaseDir = c.conf.Base + "/raft"
+		}
+		c.raft.config.FillDefaults()
+		c.raft.fsm = &stateMachine{
+			c:          c,
+			components: make(map[string]func([]byte) []byte),
+		}
+		c.raft.config.StateMachine = c.raft.fsm
+		c.raft.client = raft.NewClient(nil)
+		c.raft.server, c.err = raft.NewRaft(c.raft.config)
+		if c.err != nil {
+			return
+		}
+		properties := make(map[string]string)
+		properties["HTTP"] = c.conf.Advertise
+		c.raft.server.PropertiesSet(properties)
 	}
 }
 

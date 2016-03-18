@@ -9,11 +9,13 @@ import (
 	"github.com/alankm/makellos/core/shared"
 	"github.com/alankm/makellos/modules/messages"
 	"github.com/alankm/makellos/modules/privileges"
+	"github.com/alankm/makellos/modules/images"
 )
 
 var modules = [...]shared.Module{
 	&privileges.Privileges{},
 	&messages.Messages{},
+	&images.Images{},
 }
 
 func main() {

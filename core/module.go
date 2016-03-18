@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"runtime/debug"
 
 	"github.com/alankm/makellos/core/shared"
 )
@@ -15,8 +16,8 @@ func (c *Core) Register(module shared.Module) {
 		if r == nil {
 			return
 		}
-		fmt.Fprintf(os.Stderr, "panic whilst registering '%v'\n%v\n",
-			reflect.TypeOf(module).Name(), r)
+		fmt.Fprintf(os.Stderr, "panic whilst registering '%v'\nreason: %v\nstack:\n%v\n",
+			reflect.TypeOf(module).Name(), r, string(debug.Stack()))
 		os.Exit(1)
 	}()
 	if c.err == nil {

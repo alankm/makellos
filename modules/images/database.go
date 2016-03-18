@@ -11,7 +11,7 @@ type record struct {
 	parent string
 	dir    bool
 	chk    string
-	date   uint64
+	date   int64
 	auth   string
 	desc   string
 }

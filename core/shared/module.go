@@ -2,7 +2,10 @@ package shared
 
 import (
 	"database/sql"
+	"fmt"
 	"net/http"
+	"os"
+	"runtime/debug"
 
 	"gopkg.in/inconshreveable/log15.v2"
 
@@ -24,6 +27,10 @@ type Core interface {
 	ServiceRouter(string) *mux.Router
 	NotifyLeaderChange(*chan bool)
 	UnsubscribeLeaderChange(*chan bool)
+	RegisterSyncFunction(Module, func([]byte) []byte)
+	Encode(interface{}) []byte
+	Decode([]byte, interface{}) error
+	Sync(Module, []byte) interface{}
 	// Logging
 	Log(*Log)
 	// Access
@@ -44,6 +51,7 @@ type Rules struct {
 
 type Session interface {
 	Username() string
+	Hashword() string
 	Groups() []string
 	GID() string
 	Mode() uint16
@@ -109,6 +117,7 @@ func (h *ProtectedHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		sharedLogger.Error("recovered from panic", r.Method+": "+r.URL.String(), rec)
+		fmt.Fprintf(os.Stderr, "stack: \n%v\n", string(debug.Stack()))
 		w.Write(ResponseVorteilInternal.JSON())
 	}(h.Core, w)
 	if !h.Core.IsLeader() {

@@ -212,6 +212,10 @@ func (s *Session) Username() string {
 	return s.user
 }
 
+func (s *Session) Hashword() string {
+	return s.hash
+}
+
 func (s *Session) GID() string {
 	return s.gid
 }
