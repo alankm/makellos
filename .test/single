@@ -1,0 +1,11 @@
+version: v0.1
+database: .data/single/vorteil.db
+base: .data/single
+bind: 0.0.0.0:8000
+advertise: 0.0.0.0:8000
+raft:
+  base_directory: ./.data/single/raft
+  bind: 127.0.0.1:9000
+modules:
+  access:
+    type: local
