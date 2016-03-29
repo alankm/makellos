@@ -17,6 +17,7 @@ type Server struct {
 	access  access.Access
 	journal Messages
 	raft    consensus
+	images  Images
 }
 
 func (s *Server) Setup(configPath string) {
@@ -30,8 +31,12 @@ func (s *Server) Setup(configPath string) {
 	s.access, s.err = access.New(s.conf.Modules["access"], s.log.New("module", "access"), s.data.Database())
 	s.failOnError(s.err, "setting up access")
 	s.web.setup(&s.conf)
-	s.failOnError(s.raft.setup(s, s.conf.Advertise, &s.conf.Raft), "setting up raft")
+	s.log.Debug("HAI")
+	//s.failOnError(s.raft.setup(s, s.conf.Advertise, &s.conf.Raft), "setting up raft")
+	s.log.Debug("HAI")
 	s.journal.setup(s, s.log.New("module", "journal"))
+	s.log.Debug("HAI")
+	s.failOnError(s.images.setup(s, s.log.New("module", "images")), "setting up images")
 	s.setupRoutes()
 }
 
@@ -52,8 +57,39 @@ func (s *Server) Stop() {
 }
 
 func (s *Server) setupRoutes() {
+	r := new(Rules)
+	r.Owner = "server"
+	r.Group = "server"
+	r.Mode = 0777
+	s.failOnError(s.data.insertFile("folder", "", "", r), "adding files to database")
+
+	// login
 	s.web.mux.HandleFunc(s.servicesVersionString()+"/login", s.handlerLogin).Methods("POST")
+
+	// Messages
 	s.journal.setupRoutes(s.web.mux.PathPrefix(s.servicesVersionString() + "/messages").Subrouter())
+	s.failOnError(s.data.insertFile("service", "", "messages", r), "adding files to database")
+	s.failOnError(s.data.insertFile("service", "/messages", "debug", r), "adding files to database")
+	s.failOnError(s.data.insertFile("service", "/messages", "info", r), "adding files to database")
+	s.failOnError(s.data.insertFile("service", "/messages", "warning", r), "adding files to database")
+	s.failOnError(s.data.insertFile("service", "/messages", "error", r), "adding files to database")
+	s.failOnError(s.data.insertFile("service", "/messages", "critical", r), "adding files to database")
+	s.failOnError(s.data.insertFile("service", "/messages", "alert", r), "adding files to database")
+	s.failOnError(s.data.insertFile("service", "/messages", "all", r), "adding files to database")
+	s.failOnError(s.data.insertFile("service", "/messages", "ws", r), "adding files to database")
+	s.failOnError(s.data.insertFile("service", "/messages/ws", "debug", r), "adding files to database")
+	s.failOnError(s.data.insertFile("service", "/messages/ws", "info", r), "adding files to database")
+	s.failOnError(s.data.insertFile("service", "/messages/ws", "warning", r), "adding files to database")
+	s.failOnError(s.data.insertFile("service", "/messages/ws", "error", r), "adding files to database")
+	s.failOnError(s.data.insertFile("service", "/messages/ws", "critical", r), "adding files to database")
+	s.failOnError(s.data.insertFile("service", "/messages/ws", "alert", r), "adding files to database")
+	s.failOnError(s.data.insertFile("service", "/messages/ws", "all", r), "adding files to database")
+
+	// Images
+	s.images.setupRoutes(s.web.mux.PathPrefix(s.servicesVersionString() + "/images").Subrouter())
+
+	// website
+	s.web.mux.HandleFunc("/{path:.*}", s.websiteHandler).Methods("GET")
 }
 
 func (s *Server) servicesVersionString() string {

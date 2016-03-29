@@ -9,8 +9,6 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
-
-	"github.com/alankm/simplicity/server/access"
 )
 
 type Severity int
@@ -44,7 +42,7 @@ var SeverityStrings = map[Severity]string{
 type Log struct {
 	Severity Severity
 	Time     int64
-	Rules    access.Rules
+	Rules    Rules
 	Code     string
 	Message  string
 	Args     map[string]string
@@ -250,7 +248,7 @@ func (m *Messages) post(s *Session, w http.ResponseWriter, r *http.Request) {
 	log := &Log{
 		Severity: sevno,
 		Time:     time.Now().Unix(),
-		Rules: access.Rules{
+		Rules: Rules{
 			Owner: s.User.Name(),
 			Group: s.User.PrimaryGroup(),
 			Mode:  s.Mode(),

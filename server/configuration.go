@@ -16,6 +16,7 @@ type configuration struct {
 	Database  string                       `yaml:"database"`
 	Modules   map[string]map[string]string `yaml:"modules"`
 	Raft      raft.Config                  `yaml:"raft"`
+	Storage   storageConfiguration         `yaml:"storage"`
 }
 
 func (c *configuration) load(path string) error {

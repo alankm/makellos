@@ -33,6 +33,7 @@ const (
 		time UNSIGNED BIG INT,
 		auth VARCHAR(128),
 		desc TEXT,
+		chk VARCHAR(128),
 		FOREIGN KEY(id) REFERENCES files(id) ON DELETE CASCADE
 		)`
 )

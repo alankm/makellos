@@ -5,12 +5,15 @@ import (
 	"net/http"
 	"os"
 	"runtime/debug"
+	"strings"
 
 	"github.com/alankm/simplicity/server/access"
 )
 
 var (
 	ResponseAuthentication = NewFailResponse(0, "bad cookie")
+	ResponseAccessDenied   = NewFailResponse(0, "access denied")
+	ResponseBadMethod      = NewFailResponse(0, "bad HTTP method")
 )
 
 type Session struct {
@@ -18,12 +21,14 @@ type Session struct {
 	SU   bool
 }
 
-func (s *Session) Mode() uint16 {
-	return 0755
+type Rules struct {
+	Owner string
+	Group string
+	Mode  uint16
 }
 
-func (s *Session) CanRead(r *access.Rules) bool {
-	return false
+func (s *Session) Mode() uint16 {
+	return 0755
 }
 
 type ProtectedHandler struct {
@@ -46,6 +51,36 @@ func (p *ProtectedHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s := p.HandlerLogin(r)
 	if s == nil {
 		w.Write(ResponseAuthentication.JSON())
+		return
+	}
+
+	p.s.log("ACE")
+
+	switch r.Method {
+	case "POST":
+		path, _ := splitPath(strings.TrimPrefix(r.URL.Path, p.s.servicesVersionString()))
+		if !p.s.CanWriteFile(s, path) {
+			w.Write(ResponseAccessDenied.JSON())
+			return
+		}
+	case "PUT":
+		if !p.s.CanWriteFile(s, strings.TrimPrefix(r.URL.Path, p.s.servicesVersionString())) {
+			w.Write(ResponseAccessDenied.JSON())
+			return
+		}
+	case "GET":
+		if !p.s.CanReadFile(s, strings.TrimPrefix(r.URL.Path, p.s.servicesVersionString())) {
+			w.Write(ResponseAccessDenied.JSON())
+			return
+		}
+	case "DELETE":
+		path, _ := splitPath(strings.TrimPrefix(r.URL.Path, p.s.servicesVersionString()))
+		if !p.s.CanWriteFile(s, path) {
+			w.Write(ResponseAccessDenied.JSON())
+			return
+		}
+	default:
+		w.Write(ResponseBadMethod.JSON())
 		return
 	}
 	p.handler(s, w, r)
@@ -74,4 +109,114 @@ func (p *ProtectedHandler) HandlerLogin(r *http.Request) *Session {
 	}
 	fmt.Println("C")
 	return nil
+}
+
+func (s *Session) CanRead(r *Rules) bool {
+	if s.SU {
+		return true
+	}
+	if r.Owner == s.User.Name() {
+		if r.Mode&(1<<8) > 0 {
+			return true
+		}
+		return false
+	}
+	for _, grp := range s.User.Groups() {
+		if r.Group == grp {
+			if r.Mode&(1<<5) > 0 {
+				return true
+			}
+			return false
+		}
+	}
+	if r.Mode&(1<<2) > 0 {
+		return true
+	}
+	return false
+}
+
+func (s *Session) CanWrite(r *Rules) bool {
+	if s.SU {
+		return true
+	}
+	if r.Owner == s.User.Name() {
+		if r.Mode&(1<<7) > 0 {
+			return true
+		}
+		return false
+	}
+	for _, grp := range s.User.Groups() {
+		if r.Group == grp {
+			if r.Mode&(1<<4) > 0 {
+				return true
+			}
+			return false
+		}
+	}
+	if r.Mode&(1<<1) > 0 {
+		return true
+	}
+	return false
+}
+
+func (s *Session) CanExec(r *Rules) bool {
+	if s.SU {
+		return true
+	}
+	if r.Owner == s.User.Name() {
+		if r.Mode&(1<<6) > 0 {
+			return true
+		}
+		return false
+	}
+	for _, grp := range s.User.Groups() {
+		if r.Group == grp {
+			if r.Mode&(1<<3) > 0 {
+				return true
+			}
+			return false
+		}
+	}
+	if r.Mode&(1<<0) > 0 {
+		return true
+	}
+	return false
+}
+
+func splitPath(path string) (string, string) {
+	p := strings.TrimSuffix(path, "/")
+	if p[len(p)-1] == '/' {
+		return "", ""
+	}
+	i := strings.LastIndex(p, "/")
+	return path[:i], path[i+1:]
+}
+
+func (s *Server) CanReadFile(u *Session, path string) bool {
+	r, err := s.data.getRules(splitPath(path))
+	if err != nil {
+		return false
+	}
+	return u.CanRead(r)
+}
+
+func (s *Server) CanWriteFile(u *Session, path string) bool {
+	r, err := s.data.getRules(splitPath(path))
+	if err != nil {
+		return false
+	}
+	return u.CanWrite(r)
+}
+
+func (s *Server) CanExecFile(u *Session, path string) bool {
+	r, err := s.data.getRules(splitPath(path))
+	if err != nil {
+		return false
+	}
+	return u.CanExec(r)
+}
+
+func (s *Server) CanRecursiveFile(u *Session, path string) bool {
+	// TODO: make recursive operations work.
+	return false
 }

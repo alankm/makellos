@@ -40,6 +40,10 @@ func (f *fsm) setup(s *Server) {
 	f.log = s.log.New("module", "fsm")
 	f.actions = make(map[string]func([]byte) interface{})
 	f.actions["message"] = s.journal.postFSM
+	f.actions["imagesDelete"] = s.images.deleteFSM
+	f.actions["imagesUploadOW"] = s.images.uploadOWFSM
+	f.actions["imagesUpload"] = s.images.uploadFSM
+	f.actions["imagesAttrOW"] = s.images.attributesFSM
 }
 
 func encode(obj interface{}) []byte {
